@@ -17,12 +17,12 @@ import FinalizeModal from "../finalize/finalize-item";
 
 type ShortageItem = { partName: string; required: number; detected: number; shortage: number; };
 type UnlistedItem = { partName: string; detected: number; required: number; surplus: number; };
-type ComparisonResult = { 
-  shortageItems: ShortageItem[]; 
-  surplusItems: UnlistedItem[]; 
+type ComparisonResult = {
+  shortageItems: ShortageItem[];
+  surplusItems: UnlistedItem[];
   originalImage: string;
-  annotatedImage: string; 
-  isFinalized?: boolean;
+  annotatedImage: string;
+  isFinalized?: boolean; // Dari /api/detect/:bomCode
 };
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8081" || "http://localhost:8080";
@@ -32,7 +32,12 @@ export default function ImageImporter({ bomCode: propBomCode }: { bomCode: strin
   const router = useRouter();
   const bomCodeFromUrl = searchParams.get('bomCode');
   const viewMode = searchParams.get('view');
-  
+
+  // --- BACA STATUS DARI URL ---
+  const hasResultParam = searchParams.get('hasResult') === 'true';
+  const isFinalizedParam = searchParams.get('finalized') === 'true';
+  // ---
+
   const bomCode = propBomCode || bomCodeFromUrl;
 
   const [preview, setPreview] = React.useState<{ url: string; name: string; } | null>(null);
@@ -48,8 +53,9 @@ export default function ImageImporter({ bomCode: propBomCode }: { bomCode: strin
   const [comparisonResult, setComparisonResult] = React.useState<ComparisonResult | null>(null);
   const [isModalOpen, setIsModalOpen] = React.useState(false);
   const [isLoadingResult, setIsLoadingResult] = React.useState(false);
-  const [isFinalized, setIsFinalized] = React.useState(false);
-  
+  // Hapus state isFinalized, kita akan pakai isFinalizedParam dari URL
+  // const [isFinalized, setIsFinalized] = React.useState(false);
+
   const [isImageViewerOpen, setIsImageViewerOpen] = React.useState(false);
   const [imageViewerSrc, setImageViewerSrc] = React.useState<string | null>(null);
   const [imageViewerTitle, setImageViewerTitle] = React.useState<string>("");
@@ -57,44 +63,73 @@ export default function ImageImporter({ bomCode: propBomCode }: { bomCode: strin
   const imageInputRef = React.useRef<HTMLInputElement | null>(null);
   const modelInputRef = React.useRef<HTMLInputElement | null>(null);
 
-  const isReadOnly = viewMode === 'result';
+  const isReadOnly = viewMode === 'result'; // Ini tetap dipakai untuk disable input
 
   React.useEffect(() => {
+    // Fetch result hanya jika view=result DAN ada bomCode
+    // Status isFinalized akan datang dari URL (isFinalizedParam)
     if (isReadOnly && bomCode) {
       const fetchResult = async () => {
         setIsLoadingResult(true);
         setError(null);
+        setComparisonResult(null);
         setHistoryOriginalImage(null);
-        setIsFinalized(false);
+        // Tidak perlu reset isFinalized di sini
         try {
           const response = await fetch(`${API_URL}/api/detect/${bomCode}`);
-          if (!response.ok) throw new Error("Result not found for this BOM code.");
+          if (!response.ok) {
+              if (response.status === 404) {
+                 // Jika tidak ada result tapi URL bilang ada, mungkin perlu warning?
+                 // Atau biarkan saja, tombol finalize tidak akan muncul karena comparisonResult null
+                 console.warn("URL indicates result exists, but API returned 404.");
+                 throw new Error("No previous detection result found for this BOM code.");
+              }
+              throw new Error("Failed to fetch detection result.");
+          }
           const data: ComparisonResult = await response.json();
           setComparisonResult(data);
-          setHistoryOriginalImage(data.originalImage); 
-          setIsFinalized(data.isFinalized || false);
+          setHistoryOriginalImage(data.originalImage);
+          // Kita bisa tetap set isFinalized dari data API sebagai backup/verifikasi, tapi primary check pakai param
+          // setIsFinalized(data.isFinalized || false);
         } catch (err: any) {
           setError(err.message);
           setComparisonResult(null);
+          setHistoryOriginalImage(null);
         } finally {
           setIsLoadingResult(false);
         }
       };
-      fetchResult();
+      // Hanya fetch jika parameter URL mengindikasikan ada result
+      if (hasResultParam) {
+          fetchResult();
+      } else if (!hasResultParam && isReadOnly) {
+          // Jika view=result tapi tidak ada hasResult=true, berarti state aneh
+          setError("Inconsistent state: viewing result but no result flag found.");
+          setIsLoadingResult(false); // Pastikan loading selesai
+      }
+    } else if (!isReadOnly) {
+        // Clear state saat mode non-history
+        setComparisonResult(null);
+        setHistoryOriginalImage(null);
+        setImageFile(null);
+        if (imageInputRef.current) imageInputRef.current.value = "";
     }
-  }, [bomCode, isReadOnly, viewMode]); 
+  }, [bomCode, isReadOnly, viewMode, hasResultParam]); // Tambahkan hasResultParam
 
-  React.useEffect(() => { return () => { if (preview) URL.revokeObjectURL(preview.url); }; }, [preview]);
+  React.useEffect(() => {
+    return () => { if (preview) URL.revokeObjectURL(preview.url); };
+  }, [preview]);
 
   const handleImageFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setComparisonResult(null);
+    setHistoryOriginalImage(null);
     setError(null);
     setImageFile(file);
     setPreview({ url: URL.createObjectURL(file), name: file.name });
   };
-  
+
   const handleModelFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -102,10 +137,12 @@ export default function ImageImporter({ bomCode: propBomCode }: { bomCode: strin
       setError("Invalid model file. Must be a '.pt' file.");
       return;
     }
+    setError(null);
     setModelFile(file);
   };
 
   const handlePredict = async () => {
+    // ... (Logika handlePredict tidak berubah, tapi setelah sukses akan push ke URL baru) ...
     if (!imageFile) { setError("Please select an image first."); return; }
     if (!bomCode) { setError("No BOM Code selected. Cannot run detection."); return; }
 
@@ -118,27 +155,35 @@ export default function ImageImporter({ bomCode: propBomCode }: { bomCode: strin
 
     setIsPredicting(true);
     setError(null);
+    setComparisonResult(null);
 
     try {
       const response = await fetch(`${API_URL}/api/detect/${bomCode}`, { method: "POST", body: formData });
+       if (!response.ok) {
+         const errorData = await response.json().catch(() => ({ error: `HTTP error! Status: ${response.status}` }));
+         throw new Error(errorData.error || `HTTP error! Status: ${response.status}`);
+       }
       const data: ComparisonResult = await response.json();
-      
       setComparisonResult(data);
-      setHistoryOriginalImage(data.originalImage); 
-      setIsFinalized(false); 
+      setHistoryOriginalImage(data.originalImage);
+      // isFinalized untuk hasil baru PASTI false
 
-      router.push(`/detector?bomCode=${bomCode}&view=result`);
+      // --- NAVIGASI DENGAN PARAMETER BARU ---
+      // Hasil baru berarti hasResult=true dan finalized=false
+      router.push(`/detector?bomCode=${bomCode}&view=result&hasResult=true&finalized=false`);
+      // ---
 
     } catch (err: any) {
       console.error("Comparison failed:", err);
       setError(`Failed to get comparison result: ${err.message}`);
-      setComparisonResult(null); 
+      setComparisonResult(null);
     } finally {
       setIsPredicting(false);
     }
   };
-  
+
   const handleReset = async () => {
+    // ... (Logika handleReset tidak berubah) ...
     if (!bomCode || !window.confirm(`Are you sure you want to reset all detection data for ${bomCode}? This action cannot be undone.`)) {
       return;
     }
@@ -161,23 +206,34 @@ export default function ImageImporter({ bomCode: propBomCode }: { bomCode: strin
   };
 
   const handleFinalizeSuccess = () => {
+    // Setelah finalize, arahkan ke action list
     router.push('/actions');
+    // Mungkin juga refresh halaman BOM agar statusnya update?
+    // router.refresh(); // Jika diperlukan
   };
-  
+
   const openImageViewer = (src: string, title: string) => {
     setImageViewerSrc(src);
     setImageViewerTitle(title);
     setIsImageViewerOpen(true);
   };
-  
-  const hasItemsToFinalize =
-    comparisonResult &&
-    ((comparisonResult.shortageItems?.length ?? 0) > 0 ||
-    (comparisonResult.surplusItems?.length ?? 0) > 0);
+
+  // Hitung hasItemsToFinalize (tidak berubah)
+  const hasItemsToFinalize = React.useMemo(() => {
+      return comparisonResult &&
+             ((comparisonResult.shortageItems?.length ?? 0) > 0 ||
+              (comparisonResult.surplusItems?.length ?? 0) > 0);
+  }, [comparisonResult]);
+
+
+  // Tampilkan loading hanya saat fetch history (jika perlu)
+   if (isLoadingResult && hasResultParam) { // Hanya loading jika memang fetch
+      return <div className="text-center p-10">Loading previous result...</div>;
+  }
 
   return (
     <>
-      <FinalizeModal 
+      <FinalizeModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         onSaveSuccess={handleFinalizeSuccess}
@@ -186,7 +242,8 @@ export default function ImageImporter({ bomCode: propBomCode }: { bomCode: strin
       />
 
       <Dialog open={isImageViewerOpen} onOpenChange={setIsImageViewerOpen}>
-        <DialogContent className="sm:max-w-[90vw] h-[90vh] flex flex-col p-0">
+        {/* ... ImageViewer Dialog Content (tidak berubah) ... */}
+         <DialogContent className="sm:max-w-[90vw] h-[90vh] flex flex-col p-0">
           <DialogHeader className="p-4 border-b">
             <DialogTitle>{imageViewerTitle}</DialogTitle>
           </DialogHeader>
@@ -224,57 +281,60 @@ export default function ImageImporter({ bomCode: propBomCode }: { bomCode: strin
         )}
 
         <div className="grid lg:grid-cols-3 gap-8 items-start">
+          {/* Left Column: Configuration & Uploader (tidak berubah) */}
           <div className="lg:col-span-1 flex flex-col gap-8">
+              {/* Configuration Card */}
               <Card className={cn(isReadOnly && "bg-muted/50")}>
-                  <CardHeader>
+                 <CardHeader>
                     <CardTitle>1. Configuration</CardTitle>
                     <CardDescription>{isReadOnly ? "Configuration used for this result." : "Adjust model parameters."}</CardDescription>
                   </CardHeader>
-                  <CardContent>
-                      <div>
-                          <Label htmlFor="confidence" className="flex justify-between mb-2"><span>Confidence Threshold</span><span className="text-primary font-medium">{confidence.toFixed(2)}</span></Label>
-                          <Slider id="confidence" defaultValue={[confidence]} min={0} max={1} step={0.05} onValueChange={(val) => setConfidence(val[0])} disabled={isReadOnly} />
+                <CardContent>
+                  <div>
+                      <Label htmlFor="confidence" className="flex justify-between mb-2"><span>Confidence Threshold</span><span className="text-primary font-medium">{confidence.toFixed(2)}</span></Label>
+                      <Slider id="confidence" defaultValue={[confidence]} min={0} max={1} step={0.05} onValueChange={(val) => setConfidence(val[0])} disabled={isReadOnly} />
+                  </div>
+                  <div className="h-6"></div>
+                  <div>
+                      <Label htmlFor="iou" className="flex justify-between mb-2"><span>IoU Threshold</span><span className="text-primary font-medium">{iou.toFixed(2)}</span></Label>
+                      <Slider id="iou" defaultValue={[iou]} min={0} max={1} step={0.05} onValueChange={(val) => setIou(val[0])} disabled={isReadOnly} />
+                  </div>
+                  <div className="h-6"></div>
+                  <div className="flex items-center space-x-2 pt-2">
+                      <Switch id="agnostic-nms" checked={agnosticNms} onCheckedChange={setAgnosticNms} disabled={isReadOnly} />
+                      <Label htmlFor="agnostic-nms">Agnostic NMS</Label>
+                  </div>
+                  <div className="p-3 text-sm rounded-md bg-muted my-4"><strong>Default Model:</strong> best.pt</div>
+                  <Button variant="outline" className="w-full" onClick={() => modelInputRef.current?.click()} disabled={isReadOnly}><FileUp className="mr-2 h-4 w-4"/> Upload Custom Model (.pt)</Button>
+                  <Input ref={modelInputRef} type="file" accept=".pt" className="sr-only" onChange={handleModelFileChange} disabled={isReadOnly}/>
+                  {modelFile && (
+                      <div className="mt-4 flex items-center justify-between p-2 text-sm rounded-md border border-green-200 bg-green-50 text-green-800">
+                          <span className="font-medium truncate" title={modelFile.name}>Using: {modelFile.name}</span>
+                          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => {setModelFile(null); if (modelInputRef.current) modelInputRef.current.value = ""}} disabled={isReadOnly}>
+                              <X className="h-4 w-4"/>
+                          </Button>
                       </div>
-                      <div className="h-6"></div>
-                      <div>
-                          <Label htmlFor="iou" className="flex justify-between mb-2"><span>IoU Threshold</span><span className="text-primary font-medium">{iou.toFixed(2)}</span></Label>
-                          <Slider id="iou" defaultValue={[iou]} min={0} max={1} step={0.05} onValueChange={(val) => setIou(val[0])} disabled={isReadOnly} />
-                      </div>
-                      <div className="h-6"></div>
-                      <div className="flex items-center space-x-2 pt-2">
-                          <Switch id="agnostic-nms" checked={agnosticNms} onCheckedChange={setAgnosticNms} disabled={isReadOnly} />
-                          <Label htmlFor="agnostic-nms">Agnostic NMS</Label>
-                      </div>
-                      <div className="p-3 text-sm rounded-md bg-muted my-4"><strong>Default Model:</strong> best.pt</div>
-                      <Button variant="outline" className="w-full" onClick={() => modelInputRef.current?.click()} disabled={isReadOnly}><FileUp className="mr-2 h-4 w-4"/> Upload Custom Model (.pt)</Button>
-                      <Input ref={modelInputRef} type="file" accept=".pt" className="sr-only" onChange={handleModelFileChange} disabled={isReadOnly}/>
-                      {modelFile && (
-                          <div className="mt-4 flex items-center justify-between p-2 text-sm rounded-md border border-green-200 bg-green-50 text-green-800">
-                              <span className="font-medium truncate" title={modelFile.name}>Using: {modelFile.name}</span>
-                              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => {setModelFile(null); if (modelInputRef.current) modelInputRef.current.value = ""}} disabled={isReadOnly}>
-                                  <X className="h-4 w-4"/>
-                              </Button>
-                          </div>
-                      )}
-                  </CardContent>
+                  )}
+                </CardContent>
               </Card>
-              
+
+              {/* Image Uploader Card */}
               <Card className={cn(isReadOnly && "bg-muted/50")}>
-                  <CardHeader>
+                 <CardHeader>
                       <CardTitle>2. Image Uploader</CardTitle>
                       <CardDescription>{isReadOnly ? "Image used for this result." : "Select an image to analyze."}</CardDescription>
                   </CardHeader>
-                  <CardContent>
-                      <div role="button" className={cn("flex items-center justify-center p-8 border-2 border-dashed rounded-lg transition-colors", isReadOnly ? "cursor-not-allowed opacity-70" : "cursor-pointer hover:border-primary/60")} onClick={isReadOnly ? undefined : () => imageInputRef.current?.click()}>
-                        <UploadCloud className="w-8 h-8 text-muted-foreground mr-4" />
-                        <div className="text-center">
-                            <p className="font-medium truncate">{imageFile ? imageFile.name : (isReadOnly ? "Viewing History" : "Click to upload Image")}</p>
-                            <p className="text-muted-foreground text-sm mt-1">PNG, JPG, WEBP</p>
-                        </div>
-                      </div>
-                      <Input ref={imageInputRef} type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" onChange={handleImageFileChange} disabled={isReadOnly} />
-                  </CardContent>
-                  {!isReadOnly && (
+                <CardContent>
+                  <div role="button" className={cn("flex items-center justify-center p-8 border-2 border-dashed rounded-lg transition-colors", isReadOnly ? "cursor-not-allowed opacity-70" : "cursor-pointer hover:border-primary/60")} onClick={isReadOnly ? undefined : () => imageInputRef.current?.click()}>
+                    <UploadCloud className="w-8 h-8 text-muted-foreground mr-4" />
+                    <div className="text-center">
+                        <p className="font-medium truncate">{imageFile ? imageFile.name : (isReadOnly && historyOriginalImage ? "Viewing History" : "Click to upload Image")}</p>
+                        <p className="text-muted-foreground text-sm mt-1">PNG, JPG, WEBP</p>
+                    </div>
+                  </div>
+                  <Input ref={imageInputRef} type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" onChange={handleImageFileChange} disabled={isReadOnly} />
+                </CardContent>
+                {!isReadOnly && (
                     <CardFooter className="flex justify-end">
                         <Button size="lg" onClick={handlePredict} disabled={!imageFile || isPredicting || !bomCode}>
                             {isPredicting ? "Analyzing..." : `Compare with ${bomCode || 'BOM'}`}
@@ -283,10 +343,11 @@ export default function ImageImporter({ bomCode: propBomCode }: { bomCode: strin
                   )}
               </Card>
           </div>
-        
+
+          {/* Right Column: Comparison Results */}
           <div className="h-full lg:col-span-2">
               <Card className="h-full flex flex-col">
-              <CardHeader className="flex flex-row items-start justify-between">
+                <CardHeader className="flex flex-row items-start justify-between">
                   <div>
                     <CardTitle>3. Comparison Results</CardTitle>
                     <CardDescription>
@@ -304,15 +365,18 @@ export default function ImageImporter({ bomCode: propBomCode }: { bomCode: strin
                       {isResetting ? 'Resetting...' : 'Reset'}
                     </Button>
                   )}
-              </CardHeader>
-              <CardContent className="flex flex-col gap-8 grow"> 
-                  
-                  {(historyOriginalImage || comparisonResult?.annotatedImage) && (
+                </CardHeader>
+                <CardContent className="flex flex-col gap-8 grow">
+                  {/* Image Previews (logika skeleton tidak berubah) */}
+                  {(isPredicting || isLoadingResult || historyOriginalImage || comparisonResult?.annotatedImage) && (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border-b pb-6">
+                      {/* Original Image */}
                       <div>
                         <Label className="text-muted-foreground">Original Image</Label>
                         <div className="mt-2 border rounded-md overflow-hidden aspect-video flex items-center justify-center bg-muted">
-                          {historyOriginalImage ? (
+                           {(isPredicting || (isLoadingResult && hasResultParam)) ? ( // Loading hanya jika fetch
+                               <div className="w-full h-full loading-skeleton-gradient animate-pulse"/>
+                           ) : historyOriginalImage ? (
                             <div
                               onClick={() => openImageViewer(historyOriginalImage, "Original Image")}
                               className="w-full h-full cursor-zoom-in flex items-center justify-center"
@@ -320,7 +384,7 @@ export default function ImageImporter({ bomCode: propBomCode }: { bomCode: strin
                               <img
                                 src={historyOriginalImage}
                                 alt="Original Upload"
-                                className="object-contain max-w-full max-h-full" 
+                                className="object-contain max-w-full max-h-full"
                               />
                             </div>
                           ) : (
@@ -328,10 +392,13 @@ export default function ImageImporter({ bomCode: propBomCode }: { bomCode: strin
                           )}
                         </div>
                       </div>
+                      {/* Annotated Result */}
                       <div>
                         <Label className="text-muted-foreground">Annotated Result</Label>
                         <div className="mt-2 border rounded-md overflow-hidden aspect-video flex items-center justify-center bg-muted">
-                          {comparisonResult?.annotatedImage ? (
+                           {(isPredicting || (isLoadingResult && hasResultParam)) ? ( // Loading hanya jika fetch
+                                <div className="w-full h-full loading-skeleton-gradient animate-pulse"/>
+                           ) : comparisonResult?.annotatedImage ? (
                             <div
                               onClick={() => openImageViewer(comparisonResult.annotatedImage, "Annotated Result")}
                               className="w-full h-full cursor-zoom-in flex items-center justify-center"
@@ -339,7 +406,7 @@ export default function ImageImporter({ bomCode: propBomCode }: { bomCode: strin
                               <img
                                 src={comparisonResult.annotatedImage}
                                 alt="Annotated Result"
-                                className="object-contain max-w-full max-h-full" 
+                                className="object-contain max-w-full max-h-full"
                               />
                             </div>
                           ) : (
@@ -350,31 +417,37 @@ export default function ImageImporter({ bomCode: propBomCode }: { bomCode: strin
                     </div>
                   )}
 
+                  {/* Result Lists (tidak berubah) */}
                   <div className="grid md:grid-cols-2 gap-6 grow">
                     <ResultList
                       title="Shortage (Required in BOM)"
                       icon="shortage"
                       items={comparisonResult?.shortageItems}
-                      isLoading={isLoadingResult}
+                      isLoading={isLoadingResult && hasResultParam} // Loading hanya jika fetch
                       isPredicting={isPredicting}
                     />
                     <ResultList
                       title="Unlisted Items (Needs BOM Revision)"
                       icon="surplus"
                       items={comparisonResult?.surplusItems}
-                      isLoading={isLoadingResult}
+                      isLoading={isLoadingResult && hasResultParam} // Loading hanya jika fetch
                       isPredicting={isPredicting}
                     />
                   </div>
-              </CardContent>
-              {hasItemsToFinalize && (
-                <CardFooter className="border-t pt-6 justify-end">
-                    <Button onClick={() => setIsModalOpen(true)} disabled={isFinalized}>
-                        <Send className="mr-2 h-4 w-4" />
-                        {isFinalized ? "Already Finalized" : "Finalize & Create Action Items"}
-                    </Button>
-                </CardFooter>
-              )}
+                </CardContent>
+
+                {/* --- KONDISI BARU PAKAI PARAMETER URL --- */}
+                {/* Muncul jika: URL bilang ada hasil DAN URL bilang belum finalized DAN ada item */}
+                {hasResultParam && !isFinalizedParam && hasItemsToFinalize && (
+                  <CardFooter className="border-t pt-6 justify-end">
+                      <Button onClick={() => setIsModalOpen(true)}>
+                          <Send className="mr-2 h-4 w-4" />
+                          Finalize & Create Action Items
+                      </Button>
+                  </CardFooter>
+                )}
+                {/* --- BATAS KONDISI --- */}
+
               </Card>
           </div>
         </div>

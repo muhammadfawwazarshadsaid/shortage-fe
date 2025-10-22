@@ -18,6 +18,7 @@ const MAX_VISIBLE_CHIPS = 2;
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8081" || "http://localhost:8080";
 
 export const columns: ColumnDef<BOMEntryWithStatus>[] = [
+   // ... (kolom No, Expander, BomCode, PartRef, PartName, Quantity) ...
    {
     id: "no",
     header: "No.",
@@ -29,7 +30,7 @@ export const columns: ColumnDef<BOMEntryWithStatus>[] = [
   },
   {
     id: "expander",
-    header: () => null, 
+    header: () => null,
     cell: ({ row }) => {
       if (row.getCanExpand()) {
         return (
@@ -46,7 +47,7 @@ export const columns: ColumnDef<BOMEntryWithStatus>[] = [
           </div>
         );
       }
-      return null; 
+      return null;
     },
   },
   {
@@ -66,7 +67,7 @@ export const columns: ColumnDef<BOMEntryWithStatus>[] = [
   },
   {
     accessorKey: "partReference",
-    header: ({ column }) => ( 
+    header: ({ column }) => (
       <DataTableColumnHeader column={column} title="Part Reference (ID)" />
     ),
     cell: ({ row }) => {
@@ -97,7 +98,7 @@ export const columns: ColumnDef<BOMEntryWithStatus>[] = [
   },
   {
     accessorKey: "partName",
-    header: ({ column }) => ( 
+    header: ({ column }) => (
       <DataTableColumnHeader column={column} title="Part Name" />
     ),
     cell: ({ row }) => {
@@ -122,7 +123,7 @@ export const columns: ColumnDef<BOMEntryWithStatus>[] = [
       if (!row.getCanExpand()) {
         const entry = row.original as BOMEntry;
         return (
-          <div>
+          <div className="pl-8"> {/* Ensure padding for sub-rows */}
             <div>{entry.partName}</div>
             <div className="text-xs text-muted-foreground truncate max-w-xs">{entry.partDescription}</div>
           </div>
@@ -134,7 +135,7 @@ export const columns: ColumnDef<BOMEntryWithStatus>[] = [
   },
   {
     accessorKey: "quantity",
-    header: ({ column }) => ( 
+    header: ({ column }) => (
         <div className="text-center">
             <DataTableColumnHeader column={column} title="Quantity" />
         </div>
@@ -153,13 +154,13 @@ export const columns: ColumnDef<BOMEntryWithStatus>[] = [
       }
       return null;
     },
-    filterFn: "arrIncludes", 
+    filterFn: "arrIncludes",
   },
   {
     id: "actions",
     header: () => <div className="text-right pr-2">Action</div>,
     cell: function Cell({ row }) {
-      if (row.getCanExpand()) { 
+      if (row.getCanExpand()) {
         const router = useRouter();
         const [isResetting, setIsResetting] = useState(false);
 
@@ -168,7 +169,7 @@ export const columns: ColumnDef<BOMEntryWithStatus>[] = [
         const hasDetectionResult = entry?.hasDetectionResult ?? false;
         const isFinalized = entry?.isFinalized ?? false;
 
-        if (!bomCode) return null; 
+        if (!bomCode) return null;
 
         const handleReset = async () => {
            if (!window.confirm(`Are you sure you want to reset all detection data for ${bomCode}? This action cannot be undone.`)) {
@@ -193,13 +194,31 @@ export const columns: ColumnDef<BOMEntryWithStatus>[] = [
           }
         };
 
+        // --- FUNGSI NAVIGASI BARU ---
+        const navigateToDetector = (view: 'result' | null = null) => {
+            let url = `/detector?bomCode=${bomCode}`;
+            if (view) {
+                url += `&view=${view}`;
+            }
+            // Tambahkan status sebagai query param
+            if (hasDetectionResult) {
+                url += `&hasResult=true`;
+            }
+            if (isFinalized) {
+                url += `&finalized=true`;
+            }
+            router.push(url);
+        };
+        // ---
+
         const renderMainButton = () => {
           if (isFinalized) {
             return (
               <Button
                 size="sm"
                 variant="secondary"
-                onClick={() => router.push(`/detector?bomCode=${bomCode}&view=result`)}
+                // --- Gunakan fungsi navigasi ---
+                onClick={() => navigateToDetector('result')}
               >
                 <History className="mr-2 h-4 w-4" />
                 History
@@ -211,7 +230,8 @@ export const columns: ColumnDef<BOMEntryWithStatus>[] = [
               <Button
                 size="sm"
                 variant="outline"
-                onClick={() => router.push(`/detector?bomCode=${bomCode}&view=result`)}
+                 // --- Gunakan fungsi navigasi ---
+                onClick={() => navigateToDetector('result')}
               >
                 <Play className="mr-2 h-4 w-4" />
                 Continue
@@ -221,7 +241,8 @@ export const columns: ColumnDef<BOMEntryWithStatus>[] = [
           return (
             <Button
               size="sm"
-              onClick={() => router.push(`/detector?bomCode=${bomCode}`)}
+               // --- Gunakan fungsi navigasi (tanpa view=result) ---
+              onClick={() => navigateToDetector()}
             >
               Detect
             </Button>
@@ -246,7 +267,7 @@ export const columns: ColumnDef<BOMEntryWithStatus>[] = [
           </div>
         );
       }
-      return null; 
+      return null;
     },
   },
 ];
