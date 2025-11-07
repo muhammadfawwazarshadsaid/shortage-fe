@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useAuthStore, Material } from "@/lib/types";
+import { useAuthStore, ProjectTracking } from "@/lib/types";
 import {
   AlertDialogAction,
   AlertDialogCancel,
@@ -12,17 +12,17 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
-interface DeleteMaterialAlertProps {
-  material: Material;
+interface DeleteTrackingAlertProps {
+  tracking: ProjectTracking;
   setIsOpen: (open: boolean) => void;
-  onMaterialDeleted: (materialId: number) => void;
+  onTrackingDeleted: (trackingId: number) => void;
 }
 
-export function DeleteMaterialAlert({
-  material,
+export function DeleteTrackingAlert({
+  tracking,
   setIsOpen,
-  onMaterialDeleted,
-}: DeleteMaterialAlertProps) {
+  onTrackingDeleted,
+}: DeleteTrackingAlertProps) {
   const [isLoading, setIsLoading] = useState(false);
   const role = useAuthStore((state) => state.role);
 
@@ -30,7 +30,7 @@ export function DeleteMaterialAlert({
     setIsLoading(true);
     try {
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/materials/${material.id}`,
+        `${process.env.NEXT_PUBLIC_API_URL}/api/tracking/${tracking.id}`,
         {
           method: "DELETE",
           headers: {
@@ -41,12 +41,12 @@ export function DeleteMaterialAlert({
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || "Gagal menghapus material.");
+        throw new Error(errorData.error || "Gagal menghapus data tracking.");
       }
-      onMaterialDeleted(material.id);
+      onTrackingDeleted(tracking.id);
       setIsOpen(false);
     } catch (error) {
-      console.error("Error deleting material:", error);
+      console.error("Error deleting tracking:", error);
       alert(error instanceof Error ? error.message : "Terjadi kesalahan.");
     } finally {
       setIsLoading(false);
@@ -58,16 +58,12 @@ export function DeleteMaterialAlert({
       <AlertDialogHeader>
         <AlertDialogTitle>Apakah Anda benar-benar yakin?</AlertDialogTitle>
         <AlertDialogDescription>
-          Tindakan ini akan menghapus material{" "}
+          Tindakan ini tidak dapat dibatalkan. Ini akan menghapus data tracking
+          untuk{" "}
           <strong className="font-medium text-foreground">
-            {material.material} ({material.materialDescription})
+            {tracking.switchboardName} / {tracking.compartmentNumber}
           </strong>{" "}
           secara permanen.
-          <br />
-          <strong className="text-red-600 mt-2 block">
-            Catatan: Material hanya dapat dihapus jika Stok (Current Quantity)
-            adalah 0.
-          </strong>
         </AlertDialogDescription>
       </AlertDialogHeader>
       <AlertDialogFooter>
@@ -79,7 +75,7 @@ export function DeleteMaterialAlert({
           disabled={isLoading}
           className="bg-red-600 hover:bg-red-700"
         >
-          {isLoading ? "Menghapus..." : "Ya, Hapus Material"}
+          {isLoading ? "Menghapus..." : "Ya, Hapus Tracking"}
         </AlertDialogAction>
       </AlertDialogFooter>
     </AlertDialogContent>

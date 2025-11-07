@@ -1,6 +1,7 @@
+
 import { Skeleton } from "../ui/skeleton";
 
-export function MaterialAuthSkeleton() {
+export function BomAuthSkeleton() {
   return (
     <div className="container mx-auto py-10">
       <Skeleton className="h-10 w-1/3 mb-4" />

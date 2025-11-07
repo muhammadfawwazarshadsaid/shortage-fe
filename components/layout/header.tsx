@@ -24,7 +24,6 @@ export function Header({ toggleSidebar, isSidebarCollapsed }: HeaderProps) {
 
   const getPageTitle = () => {
     if (pathname.startsWith("/profile")) return "Profil";
-    if (pathname.startsWith("/vendors")) return "Vendors";
     if (pathname.startsWith("/materials")) return "Materials";
     return "Project Tracker";
   };

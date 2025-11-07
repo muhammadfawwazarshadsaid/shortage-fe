@@ -1,6 +1,6 @@
 
 import { VendorPage } from "@/components/vendors/vendor-page";
 
-export default function MaterialsPage() {
+export default function VendorsPage() {
   return <VendorPage />;
 }

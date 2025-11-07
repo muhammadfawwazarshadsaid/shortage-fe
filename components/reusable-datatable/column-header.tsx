@@ -22,8 +22,6 @@ interface DataTableColumnHeaderProps<TData, TValue> extends React.HTMLAttributes
 }
 
 export function DataTableColumnHeader<TData, TValue>({ column, title, className }: DataTableColumnHeaderProps<TData, TValue>) {
-  const uniqueValues = Array.from(column.getFacetedUniqueValues().keys()).sort();
-  const selectedValues = new Set(column.getFilterValue() as string[]);
 
   const getDisplayValue = (val: unknown): string => {
     if (val === null || val === undefined) {
@@ -50,14 +48,23 @@ export function DataTableColumnHeader<TData, TValue>({ column, title, className 
     return String(val);
   };
   
-  const optionsWithKeys = uniqueValues.map((option) => ({
-    key: getKey(option),
-    displayValue: getDisplayValue(option),
-  }));
 
-  const uniqueOptions = Array.from(
-    new Map(optionsWithKeys.map((item) => [item.key, item])).values()
-  );
+  const facetedValuesMap = column.getFacetedUniqueValues();
+  const uniqueValues = facetedValuesMap
+    ? Array.from(facetedValuesMap.keys()).sort()
+    : [];
+
+  const currentFilterValues = (column.getFilterValue() || []) as unknown[];
+
+  const valueMap = React.useMemo(() => {
+    const map = new Map<string, unknown>();
+    uniqueValues.forEach(value => {
+      map.set(getKey(value), value); 
+    });
+    return map;
+  }, [uniqueValues]); 
+
+  const selectedKeys = new Set(currentFilterValues.map(getKey)); 
 
   return (
     <div className={cn("flex items-center space-x-2", className)}>
@@ -67,9 +74,9 @@ export function DataTableColumnHeader<TData, TValue>({ column, title, className 
           <PopoverTrigger asChild>
             <Button variant="ghost" size="sm" className="-ml-3 h-8 data-[state=open]:bg-accent">
               <span>{title}</span>
-              {selectedValues.size > 0 && (
+              {selectedKeys.size > 0 && (
                 <Badge variant="secondary" className="ml-2 rounded-sm px-1 font-normal">
-                  {selectedValues.size}
+                  {selectedKeys.size}
                 </Badge>
               )}
             </Button>
@@ -80,30 +87,36 @@ export function DataTableColumnHeader<TData, TValue>({ column, title, className 
               <CommandList>
                 <CommandEmpty>No results found.</CommandEmpty>
                 <CommandGroup>
-                  {uniqueOptions.map((option) => {
-                    const isSelected = selectedValues.has(option.displayValue);
+                  {uniqueValues.map((value) => { 
+                    const displayValue = getDisplayValue(value);
+                    const key = getKey(value); 
+                    const isSelected = selectedKeys.has(key); 
                     return (
                       <CommandItem
-                        key={option.key}
+                        key={key} 
                         onSelect={() => {
                           if (isSelected) {
-                            selectedValues.delete(option.displayValue);
+                            selectedKeys.delete(key);
                           } else {
-                            selectedValues.add(option.displayValue);
+                            selectedKeys.add(key);
                           }
-                          const filterValues = Array.from(selectedValues);
+                          
+                          const filterValues = Array.from(selectedKeys)
+                            .map(k => valueMap.get(k))
+                            .filter(v => v !== undefined); 
+
                           column.setFilterValue(filterValues.length ? filterValues : undefined);
                         }}
                       >
                         <div className={cn("mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary", isSelected ? "bg-primary text-primary-foreground" : "opacity-50 [&_svg]:invisible")}>
                           <Check className={cn("h-4 w-4")} />
                         </div>
-                        <span>{option.displayValue}</span>
+                        <span>{displayValue}</span> 
                       </CommandItem>
                     );
                   })}
                 </CommandGroup>
-                {selectedValues.size > 0 && (
+                {selectedKeys.size > 0 && (
                   <>
                     <CommandSeparator />
                     <CommandGroup>

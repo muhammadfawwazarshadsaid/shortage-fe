@@ -24,17 +24,23 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { Material } from "@/lib/types"; // Diubah
+import { ActualPart } from "@/lib/types";
 import { Input } from "@/components/ui/input";
 import { X } from "lucide-react";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../ui/select";
 
-interface DataTableProps<TData extends Material, TValue> { // Diubah
+interface DataTableProps<TData extends ActualPart, TValue> {
   columns: ColumnDef<TData, TValue>[];
   data: TData[];
 }
 
-export function MaterialDataTable<TData extends Material, TValue>({ // Diubah
+export function ActualPartsDataTable<TData extends ActualPart, TValue>({
   columns,
   data,
 }: DataTableProps<TData, TValue>) {
@@ -50,11 +56,7 @@ export function MaterialDataTable<TData extends Material, TValue>({ // Diubah
     const filterWords = String(filterValue).toLowerCase().split(" ").filter(Boolean);
     if (filterWords.length === 0) return true;
 
-    const rowText = row
-      .getVisibleCells()
-      .map((cell) => String(cell.getValue() ?? ""))
-      .join(" ")
-      .toLowerCase();
+    const rowText = row.original.material.toLowerCase();
 
     return filterWords.every((word) => rowText.includes(word));
   };
@@ -70,7 +72,7 @@ export function MaterialDataTable<TData extends Material, TValue>({ // Diubah
     filterFns: {
       multiWord: multiWordFilterFn,
     },
-    globalFilterFn: multiWordFilterFn,
+    globalFilterFn: "multiWord" as any,
     onGlobalFilterChange: setGlobalFilter,
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
@@ -126,7 +128,7 @@ export function MaterialDataTable<TData extends Material, TValue>({ // Diubah
               type="text"
               placeholder={
                 filterChips.length === 0
-                  ? "Cari, lalu tekan Enter..."
+                  ? "Cari material..., lalu tekan Enter..."
                   : "Tambah filter..."
               }
               value={inputValue}
@@ -206,13 +208,14 @@ export function MaterialDataTable<TData extends Material, TValue>({ // Diubah
                   colSpan={columns.length}
                   className="h-24 text-center font-light"
                 >
-                  Tidak ada data.
+                  Tidak ada material.
                 </TableCell>
               </TableRow>
             )}
           </TableBody>
         </Table>
       </div>
+
       <div className="flex items-center justify-between py-4">
         <div className="flex items-center space-x-2">
           <p className="text-sm font-light">Baris per halaman:</p>
@@ -226,7 +229,7 @@ export function MaterialDataTable<TData extends Material, TValue>({ // Diubah
               <SelectValue placeholder={table.getState().pagination.pageSize} />
             </SelectTrigger>
             <SelectContent side="top">
-              {[10, 15, 20, 25, 30].map((pageSize) => (
+              {[5, 10, 15].map((pageSize) => (
                 <SelectItem key={pageSize} value={`${pageSize}`}>
                   {pageSize}
                 </SelectItem>

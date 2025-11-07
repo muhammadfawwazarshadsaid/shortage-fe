@@ -55,7 +55,7 @@ export function AddUserModal({ setIsOpen, onUserAdded }: AddUserModalProps) {
         };
 
         const compRes = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL}/api/companies`,
+          `${process.env.NEXT_PUBLIC_API_URL}/api/vendors/companies`,
           { headers }
         );
         if (compRes.ok) {
@@ -67,7 +67,7 @@ export function AddUserModal({ setIsOpen, onUserAdded }: AddUserModalProps) {
         }
 
         const typeRes = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL}/api/vendor-types`,
+          `${process.env.NEXT_PUBLIC_API_URL}/api/vendors/vendor-types`,
           { headers }
         );
         if (typeRes.ok) {

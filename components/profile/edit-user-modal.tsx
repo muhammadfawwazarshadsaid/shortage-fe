@@ -71,7 +71,7 @@ export function EditUserModal({
         };
 
         const compRes = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL}/api/companies`,
+          `${process.env.NEXT_PUBLIC_API_URL}/api/vendors/companies`,
           { headers }
         );
         if (compRes.ok) {
@@ -88,7 +88,7 @@ export function EditUserModal({
         }
 
         const typeRes = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL}/api/vendor-type`,
+          `${process.env.NEXT_PUBLIC_API_URL}/api/vendors/vendor-type`,
           { headers }
         );
         if (typeRes.ok) {
