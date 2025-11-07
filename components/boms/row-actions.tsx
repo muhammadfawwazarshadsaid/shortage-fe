@@ -14,8 +14,7 @@ import {
 import { Dialog } from "@/components/ui/dialog";
 import { AlertDialog } from "@/components/ui/alert-dialog";
 import { BomVersionGroup } from "@/lib/types";
-import { DeleteBomAlert } from "./delete-bom-alert"; // Ini untuk HAPUS VERSI
-import { DeleteBomGroupAlert } from "./delete-bom-group-alert"; // **IMPORT BARU UNTUK HAPUS GRUP**
+import { DeleteBomGroupAlert } from "./delete-bom-group-alert"; 
 import { EditBomModal } from "./edit-bom-modal";
 import { ViewBomModal } from "./view-bom-modal";
 

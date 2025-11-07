@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { BOM, BomVersionGroup, useAuthStore } from "@/lib/types"; // Import tipe baru
+import { BOM, BomVersionGroup, useAuthStore } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { PlusCircle } from "lucide-react";

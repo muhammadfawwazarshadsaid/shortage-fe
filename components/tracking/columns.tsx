@@ -1,21 +1,17 @@
 "use client";
 
-import { useState } from "react"; // 1. Import useState
+import { useState } from "react";
 import { ColumnDef } from "@tanstack/react-table";
 import {
   ProjectTracking,
   Project,
   BomMaterial,
-  ActualPart,
   NullTime,
 } from "@/lib/types";
 import { DataTableColumnHeader } from "../reusable-datatable/column-header";
 import { TrackingDataTableRowActions } from "./row-actions";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-// 2. Import Dialog dan DialogTrigger
 import { Dialog, DialogTrigger } from "@/components/ui/dialog";
-// 3. Import Modal yang akan dibuka
 import { ViewActualPartsModal } from "./view-actual-parts-modal";
 
 type TrackingUpdateHandler = () => void;
@@ -42,9 +38,6 @@ const formatDate = (dateObj: NullTime | null) => {
     return <span className="text-muted-foreground">-</span>;
   }
 };
-
-// 4. Hapus komponen wrapper 'ActualPartsModalTrigger' dan 'ActualPartsCell'
-// ... (KODE LAMA DIHAPUS) ...
 
 export const getTrackingColumns = (
   projects: Project[],
@@ -128,12 +121,10 @@ export const getTrackingColumns = (
     },
   },
   
-  // --- 5. PERBAIKAN LENGKAP UNTUK KEDUA MASALAH ---
   {
     accessorKey: "actualParts",
     header: "Actual Parts (Qty & Views)",
     cell: ({ row }) => {
-      // State modal sekarang lokal di dalam sel
       const [isViewOpen, setIsViewOpen] = useState(false);
       const parts = row.original.actualParts;
 
@@ -171,7 +162,6 @@ export const getTrackingColumns = (
             <ViewActualPartsModal
               trackingData={row.original}
               setIsOpen={setIsViewOpen}
-              // Semua props yang diperlukan sekarang diteruskan (memperbaiki "Edit Details")
               projects={projects}
               bomMaterials={bomMaterials}
               onTrackingUpdated={onTrackingUpdated}
@@ -183,7 +173,6 @@ export const getTrackingColumns = (
     },
     enableSorting: false,
   },
-  // --- AKHIR PERBAIKAN ---
 
   {
     accessorKey: "testedBy",
