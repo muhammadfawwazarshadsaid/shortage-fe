@@ -9,6 +9,7 @@ import {
   DetectionResult,
   CompareItemDetail,
   BOM,
+  BomMaterialItem,
 } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import {
@@ -82,9 +83,11 @@ export function CompareDetailPage() {
   const [isClient, setIsClient] = useState(false);
 
   const [isBomModalOpen, setIsBomModalOpen] = useState(false);
-  const [selectedBomForEdit, setSelectedBomForEdit] = useState<BOM | null>(
-    null
-  );
+  const [selectedVersionForEdit, setSelectedVersionForEdit] = useState<{
+    bomCode: string;
+    versionTag: string;
+    materials: BomMaterialItem[];
+  } | null>(null);
 
   const [shortageExcessStatus, setShortageExcessStatus] =
     useState("Belum Ada Status");
@@ -143,7 +146,7 @@ export function CompareDetailPage() {
     const map: MappedDetection = {};
     for (const result of data.detectionResults) {
       const viewName = result.view;
-      const fullImage = result.annotatedImage;
+      const fullImage = result.originalImage;
 
       for (const summary of result.summary) {
         const partName = summary.class_name;
@@ -240,13 +243,30 @@ export function CompareDetailPage() {
   };
 
   const openBomEdit = (material: string) => {
-    const bomToEdit = boms.find((b) => b.material === material);
-    if (bomToEdit) {
-      setSelectedBomForEdit(bomToEdit);
-      setIsBomModalOpen(true);
-    } else {
-      toast.error("Material tidak ditemukan di master BOM.");
-    }
+    if (!data) return;
+
+    const bomCode = data.comparison.bomCode;
+    const versionTag = data.comparison.versionTag || "default";
+
+    const materialsForVersion: BomMaterialItem[] = boms
+      .filter(
+        (b) =>
+          b.bomCode === bomCode && (b.versionTag || "default") === versionTag
+      )
+      .map((b) => ({
+        id: b.id,
+        material: b.material,
+        materialDescription: b.materialDescription,
+        partReference: b.partReference,
+        qty: b.qty,
+      }));
+
+    setSelectedVersionForEdit({
+      bomCode: bomCode,
+      versionTag: versionTag,
+      materials: materialsForVersion,
+    });
+    setIsBomModalOpen(true);
   };
 
   const openImageModal = (url: string) => {
@@ -267,12 +287,26 @@ export function CompareDetailPage() {
   return (
     <>
       <Dialog open={isBomModalOpen} onOpenChange={setIsBomModalOpen}>
-        {selectedBomForEdit && (
+        {selectedVersionForEdit && (
           <EditBomModal
-            bom={selectedBomForEdit}
+            versionData={selectedVersionForEdit}
             setIsOpen={setIsBomModalOpen}
-            onBomUpdated={() => {
+            onBomGroupUpdated={() => {
               toast.success("BOM Diperbarui!");
+              
+              if (role && comparisonId) {
+                const refetchBoms = async () => {
+                    try {
+                      const headers = { "X-User-Role": role };
+                      const bomsRes = await fetch(`${GO_API_URL}/api/boms/`, { headers });
+                      if (!bomsRes.ok) throw new Error("Gagal refresh data BOM");
+                      setBoms(await bomsRes.json());
+                    } catch (error) {
+                      toast.error((error as Error).message);
+                    }
+                };
+                refetchBoms();
+              }
             }}
           />
         )}
@@ -284,12 +318,14 @@ export function CompareDetailPage() {
             <DialogTitle>Image Preview</DialogTitle>
           </DialogHeader>
           <div className="flex-1 relative">
-            <Image
-              src={selectedImageUrl || ""}
-              alt="Enlarged preview"
-              layout="fill"
-              objectFit="contain"
-            />
+            {selectedImageUrl && (
+              <Image
+                src={selectedImageUrl}
+                alt="Enlarged preview"
+                layout="fill"
+                objectFit="contain"
+              />
+            )}
           </div>
         </DialogContent>
       </Dialog>
@@ -308,15 +344,18 @@ export function CompareDetailPage() {
             </Button>
             <h1 className="text-3xl">Detail Perbandingan</h1>
             <div className="flex flex-wrap items-center gap-2 mt-2">
-              <span className="font-light inline-flex items-center rounded-md bg-muted px-2 py-1 text-sm text-muted-foreground">
-                BOM: {comparison.bomCode}
-              </span>
-              <span className="font-light inline-flex items-center rounded-md bg-blue-100 dark:bg-blue-900/50 px-2 py-1 text-sm text-blue-800 dark:text-blue-200">
+              <Badge variant="secondary" className="font-light">
+                BOM: {comparison.bomCode} (v: {comparison.versionTag || 'default'})
+              </Badge>
+              <Badge variant="secondary" className="font-light">
+                WBS: {comparison.wbsNumber?.String || "-"}
+              </Badge>
+              <Badge variant="secondary" className="font-light">
                 {comparison.switchboardName}
-              </span>
-              <span className="font-light inline-flex items-center rounded-md bg-green-100 dark:bg-green-900/50 px-2 py-1 text-sm text-green-800 dark:text-green-200">
+              </Badge>
+              <Badge variant="secondary" className="font-light">
                 {comparison.compartmentNumber}
-              </span>
+              </Badge>
             </div>
           </div>
           <Button size="lg" onClick={handleSaveChanges} disabled={isSaving}>
@@ -503,7 +542,8 @@ function ItemCard({ item, detection, onEditBom, onImageClick }: ItemCardProps) {
         <CardDescription className={`text-lg ${statusColor}`}>
           BOM: {item.bomQty} | Actual: {item.actualQty}
           <span className="font-medium ml-2">
-            ({item.difference > 0 ? "+" : ""}{item.difference})
+            ({item.difference > 0 ? "+" : ""}
+            {item.difference})
           </span>
         </CardDescription>
       </CardHeader>
@@ -535,12 +575,14 @@ function ItemCard({ item, detection, onEditBom, onImageClick }: ItemCardProps) {
                         className="relative h-40 w-full rounded-md border bg-white overflow-hidden cursor-pointer"
                         onClick={() => onImageClick(data.fullAnnotatedImage)}
                       >
-                        <Image
-                          src={data.fullAnnotatedImage}
-                          alt={`Full anotasi ${viewName}`}
-                          layout="fill"
-                          objectFit="contain"
-                        />
+                        {data.fullAnnotatedImage && (
+                          <Image
+                            src={data.fullAnnotatedImage}
+                            alt={`Full anotasi ${viewName}`}
+                            layout="fill"
+                            objectFit="contain"
+                          />
+                        )}
                       </div>
                     </div>
                     <div>
@@ -550,17 +592,19 @@ function ItemCard({ item, detection, onEditBom, onImageClick }: ItemCardProps) {
                       <ScrollArea className="h-28 w-full p-2 border rounded-md bg-white">
                         <div className="flex flex-wrap gap-2">
                           {data.crops.length > 0 ? (
-                            data.crops.map((crop, index) => (
-                              <Image
-                                key={index}
-                                src={crop}
-                                alt={`Crop ${index + 1}`}
-                                width={64}
-                                height={64}
-                                className="h-16 w-16 object-cover rounded-md border cursor-pointer"
-                                onClick={() => onImageClick(crop)}
-                              />
-                            ))
+                            data.crops
+                              .filter((crop) => crop)
+                              .map((crop, index) => (
+                                <Image
+                                  key={index}
+                                  src={crop}
+                                  alt={`Crop ${index + 1}`}
+                                  width={64}
+                                  height={64}
+                                  className="h-16 w-16 object-cover rounded-md border cursor-pointer"
+                                  onClick={() => onImageClick(crop)}
+                                />
+                              ))
                           ) : (
                             <div className="flex flex-col items-center justify-center w-full h-24 text-muted-foreground">
                               <ImageIcon className="h-6 w-6" />
